@@ -64,7 +64,7 @@ const PDFPageGrid: React.FC = () => {
       });
     };
     
-    const onMouseUp = () => {
+    const onMouseUp = (upEvent: MouseEvent) => {
       if (!selectionBox) return;
       
       // Determine which pages are within the selection box
@@ -88,8 +88,16 @@ const PDFPageGrid: React.FC = () => {
         }
       });
       
+      // Only continue if we have selected pages
       if (selectedPageIds.length > 0) {
-        selectPagesByArea(selectedPageIds);
+        // Check if the user is holding Shift (for deselect) or Ctrl/Command (for toggle)
+        if (upEvent.shiftKey) {
+          // Deselect all pages in the selection
+          selectPagesByArea(selectedPageIds, false);
+        } else {
+          // Select all pages in the selection
+          selectPagesByArea(selectedPageIds, true);
+        }
       }
       
       setSelectionBox(null);
@@ -136,26 +144,7 @@ const PDFPageGrid: React.FC = () => {
         <Droppable 
           droppableId="pdf-pages" 
           direction="horizontal"
-          renderClone={(provided, snapshot, rubric) => (
-            <div
-              ref={provided.innerRef}
-              {...provided.draggableProps}
-              {...provided.dragHandleProps}
-              style={{
-                ...provided.draggableProps.style,
-                width: '100%', // Maintain width during drag
-                height: 'auto', // Maintain height ratio
-              }}
-            >
-              <PageCard
-                page={pages[rubric.source.index]}
-                index={rubric.source.index}
-                onCheckboxChange={handleCheckboxChange}
-                dragHandleProps={null}
-                isDragging={true}
-              />
-            </div>
-          )}
+          isDropDisabled={false}
         >
           {(provided) => (
             <div 
@@ -168,6 +157,7 @@ const PDFPageGrid: React.FC = () => {
                   key={page.id} 
                   draggableId={page.id} 
                   index={index}
+                  disableInteractiveElementBlocking={true}
                 >
                   {(provided, snapshot) => (
                     <div
@@ -178,21 +168,16 @@ const PDFPageGrid: React.FC = () => {
                       {...provided.draggableProps}
                       style={{
                         ...provided.draggableProps.style,
-                        // Ensure consistent sizing when dragging
-                        width: snapshot.isDragging ? 'auto' : undefined,
-                        height: snapshot.isDragging ? 'auto' : undefined,
-                        // Use higher z-index when dragging
-                        zIndex: snapshot.isDragging ? 1000 : undefined,
-                        // If not being dragged, normal position
-                        transform: snapshot.isDragging ? provided.draggableProps.style?.transform : undefined,
+                        zIndex: snapshot.isDragging ? 1000 : 'auto',
                       }}
+                      className={snapshot.isDragging ? "touch-none" : ""}
                     >
                       <PageCard
                         page={page}
                         index={index}
                         onCheckboxChange={handleCheckboxChange}
                         dragHandleProps={provided.dragHandleProps}
-                        isDragging={isDragging}
+                        isDragging={snapshot.isDragging}
                       />
                     </div>
                   )}
@@ -226,7 +211,8 @@ const PageCard: React.FC<PageCardProps> = ({
     <Card 
       className={cn(
         "group relative overflow-hidden border pdf-page",
-        page.selected ? "border-cdl" : "border-border"
+        page.selected ? "border-cdl" : "border-border",
+        isDragging ? "shadow-lg" : ""
       )}
     >
       <div className="aspect-[3/4] relative">
