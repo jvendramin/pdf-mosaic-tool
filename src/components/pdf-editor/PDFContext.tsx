@@ -13,7 +13,6 @@ export interface PDFPage {
 interface PDFContextType {
   pages: PDFPage[];
   loading: boolean;
-  selectionMode: boolean;
   exportFileName: string;
   setExportFileName: (name: string) => void;
   uploadPDFs: (files: FileList) => Promise<void>;
@@ -26,7 +25,6 @@ interface PDFContextType {
   reorderPages: (startIndex: number, endIndex: number) => void;
   exportPDF: () => Promise<void>;
   selectedPages: PDFPage[];
-  setSelectionMode: (mode: boolean) => void;
   selectPagesByArea: (pageIds: string[]) => void;
 }
 
@@ -47,7 +45,6 @@ interface PDFProviderProps {
 export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
   const [pages, setPages] = useState<PDFPage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
   const [exportFileName, setExportFileName] = useState(`merged_document_${new Date().toISOString().slice(0, 10)}`);
 
   const selectedPages = pages.filter(page => page.selected);
@@ -276,7 +273,6 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
   const value = {
     pages,
     loading,
-    selectionMode,
     exportFileName,
     setExportFileName,
     uploadPDFs,
@@ -289,7 +285,6 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
     reorderPages,
     exportPDF,
     selectedPages,
-    setSelectionMode,
     selectPagesByArea
   };
 

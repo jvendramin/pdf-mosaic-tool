@@ -9,22 +9,19 @@ import {
   Square, 
   Trash2, 
   Download,
-  Loader2,
-  MousePointer,
-  Lasso
+  Loader2
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from '@/lib/utils';
 
 const PDFToolbar: React.FC = () => {
   const { 
     pages, 
     loading,
     selectedPages,
-    selectionMode,
-    setSelectionMode,
     exportFileName,
     setExportFileName,
     selectAllPages, 
@@ -53,10 +50,6 @@ const PDFToolbar: React.FC = () => {
     movePagesDown(selectedIds);
   };
 
-  const toggleSelectionMode = () => {
-    setSelectionMode(!selectionMode);
-  };
-
   if (pages.length === 0) {
     return null;
   }
@@ -69,23 +62,6 @@ const PDFToolbar: React.FC = () => {
         </div>
         
         <Separator orientation="vertical" className="h-8" />
-        
-        <Button 
-          variant={selectionMode ? "default" : "outline"}
-          size="sm" 
-          onClick={toggleSelectionMode}
-          className={cn(
-            "flex items-center gap-1 button-hover",
-            selectionMode && "bg-cdl hover:bg-cdl-dark"
-          )}
-        >
-          {selectionMode ? (
-            <MousePointer className="h-4 w-4" />
-          ) : (
-            <Lasso className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">{selectionMode ? "Exit Selection" : "Area Select"}</span>
-        </Button>
         
         <Button 
           variant="outline" 
@@ -179,7 +155,5 @@ const PDFToolbar: React.FC = () => {
     </div>
   );
 };
-
-const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
 
 export default PDFToolbar;

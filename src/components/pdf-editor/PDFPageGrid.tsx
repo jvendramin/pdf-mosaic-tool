@@ -8,7 +8,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import { Grip } from 'lucide-react';
 
 const PDFPageGrid: React.FC = () => {
-  const { pages, togglePageSelection, reorderPages, selectionMode, selectPagesByArea } = usePDFContext();
+  const { pages, togglePageSelection, reorderPages, selectPagesByArea } = usePDFContext();
   const [isDragging, setIsDragging] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
@@ -34,7 +34,7 @@ const PDFPageGrid: React.FC = () => {
   };
   
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!selectionMode || !gridRef.current) return;
+    if (!gridRef.current) return;
     
     // Only start selection with left mouse button
     if (e.button !== 0) return;
@@ -99,7 +99,7 @@ const PDFPageGrid: React.FC = () => {
     
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [selectionMode, selectionBox, selectPagesByArea]);
+  }, [selectionBox, selectPagesByArea]);
   
   // Update page references whenever pages change
   const setPageRef = useCallback((pageId: string, element: HTMLDivElement | null) => {
@@ -117,7 +117,7 @@ const PDFPageGrid: React.FC = () => {
   return (
     <div 
       ref={gridRef}
-      className="relative"
+      className="relative cursor-crosshair"
       onMouseDown={handleMouseDown}
     >
       {selectionBox && (
@@ -127,19 +127,39 @@ const PDFPageGrid: React.FC = () => {
             left: Math.min(selectionBox.startX, selectionBox.endX),
             top: Math.min(selectionBox.startY, selectionBox.endY),
             width: Math.abs(selectionBox.endX - selectionBox.startX),
-            height: Math.abs(selectionBox.endY - selectionBox.startY)
+            height: Math.abs(selectionBox.endY - selectionBox.endY)
           }}
         />
       )}
       
       <DragDropContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-        <Droppable droppableId="pdf-pages" direction="horizontal">
+        <Droppable 
+          droppableId="pdf-pages" 
+          direction="horizontal"
+          renderClone={(provided, snapshot, rubric) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.draggableProps}
+              {...provided.dragHandleProps}
+              style={{
+                ...provided.draggableProps.style,
+                width: '100%', // Maintain width during drag
+                height: 'auto', // Maintain height ratio
+              }}
+            >
+              <PageCard
+                page={pages[rubric.source.index]}
+                index={rubric.source.index}
+                onCheckboxChange={handleCheckboxChange}
+                dragHandleProps={null}
+                isDragging={true}
+              />
+            </div>
+          )}
+        >
           {(provided) => (
             <div 
-              className={cn(
-                "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 mt-6 pb-6",
-                selectionMode && "cursor-crosshair"
-              )}
+              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 mt-6 pb-6"
               {...provided.droppableProps}
               ref={provided.innerRef}
             >
@@ -148,7 +168,6 @@ const PDFPageGrid: React.FC = () => {
                   key={page.id} 
                   draggableId={page.id} 
                   index={index}
-                  isDragDisabled={selectionMode}
                 >
                   {(provided, snapshot) => (
                     <div
@@ -159,7 +178,13 @@ const PDFPageGrid: React.FC = () => {
                       {...provided.draggableProps}
                       style={{
                         ...provided.draggableProps.style,
-                        zIndex: snapshot.isDragging ? 1000 : undefined
+                        // Ensure consistent sizing when dragging
+                        width: snapshot.isDragging ? 'auto' : undefined,
+                        height: snapshot.isDragging ? 'auto' : undefined,
+                        // Use higher z-index when dragging
+                        zIndex: snapshot.isDragging ? 1000 : undefined,
+                        // If not being dragged, normal position
+                        transform: snapshot.isDragging ? provided.draggableProps.style?.transform : undefined,
                       }}
                     >
                       <PageCard
@@ -168,7 +193,6 @@ const PDFPageGrid: React.FC = () => {
                         onCheckboxChange={handleCheckboxChange}
                         dragHandleProps={provided.dragHandleProps}
                         isDragging={isDragging}
-                        isSelectionMode={selectionMode}
                       />
                     </div>
                   )}
@@ -189,7 +213,6 @@ interface PageCardProps {
   onCheckboxChange: (pageId: string) => void;
   dragHandleProps: any;
   isDragging: boolean;
-  isSelectionMode: boolean;
 }
 
 const PageCard: React.FC<PageCardProps> = ({
@@ -197,8 +220,7 @@ const PageCard: React.FC<PageCardProps> = ({
   index,
   onCheckboxChange,
   dragHandleProps,
-  isDragging,
-  isSelectionMode
+  isDragging
 }) => {
   return (
     <Card 
@@ -227,19 +249,17 @@ const PageCard: React.FC<PageCardProps> = ({
           />
         </div>
         
-        {!isSelectionMode && (
-          <div 
-            {...dragHandleProps}
-            className={cn(
-              "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-              "w-8 h-8 rounded-full bg-background/80 border border-input flex items-center justify-center",
-              "opacity-0 group-hover:opacity-100 transition-opacity cursor-grab",
-              isDragging && "cursor-grabbing"
-            )}
-          >
-            <Grip className="h-4 w-4 text-muted-foreground" />
-          </div>
-        )}
+        <div 
+          {...dragHandleProps}
+          className={cn(
+            "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
+            "w-8 h-8 rounded-full bg-background/80 border border-input flex items-center justify-center",
+            "opacity-0 group-hover:opacity-100 transition-opacity cursor-grab",
+            isDragging && "cursor-grabbing"
+          )}
+        >
+          <Grip className="h-4 w-4 text-muted-foreground" />
+        </div>
         
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
           <p className="text-white text-xs font-medium truncate">
