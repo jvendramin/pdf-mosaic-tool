@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from "sonner";
 
@@ -14,6 +13,9 @@ export interface PDFPage {
 interface PDFContextType {
   pages: PDFPage[];
   loading: boolean;
+  selectionMode: boolean;
+  exportFileName: string;
+  setExportFileName: (name: string) => void;
   uploadPDFs: (files: FileList) => Promise<void>;
   togglePageSelection: (pageId: string) => void;
   selectAllPages: () => void;
@@ -24,6 +26,8 @@ interface PDFContextType {
   reorderPages: (startIndex: number, endIndex: number) => void;
   exportPDF: () => Promise<void>;
   selectedPages: PDFPage[];
+  setSelectionMode: (mode: boolean) => void;
+  selectPagesByArea: (pageIds: string[]) => void;
 }
 
 const PDFContext = createContext<PDFContextType | undefined>(undefined);
@@ -43,6 +47,8 @@ interface PDFProviderProps {
 export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
   const [pages, setPages] = useState<PDFPage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [exportFileName, setExportFileName] = useState(`merged_document_${new Date().toISOString().slice(0, 10)}`);
 
   const selectedPages = pages.filter(page => page.selected);
 
@@ -193,6 +199,15 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
     setPages(result);
   };
 
+  const selectPagesByArea = (pageIds: string[]) => {
+    setPages(prevPages =>
+      prevPages.map(page => ({
+        ...page,
+        selected: pageIds.includes(page.id) || page.selected
+      }))
+    );
+  };
+
   const exportPDF = async () => {
     if (selectedPages.length === 0) {
       toast.error("No pages selected for export");
@@ -242,11 +257,11 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
       // Save the PDF
       const pdfBytes = await pdfDoc.save();
       
-      // Create a blob and download the file
+      // Create a blob and download the file with custom name
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `merged_document_${new Date().toISOString().slice(0, 10)}.pdf`;
+      link.download = `${exportFileName}.pdf`;
       link.click();
       
       toast.success('PDF exported successfully!');
@@ -261,6 +276,9 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
   const value = {
     pages,
     loading,
+    selectionMode,
+    exportFileName,
+    setExportFileName,
     uploadPDFs,
     togglePageSelection,
     selectAllPages,
@@ -270,7 +288,9 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
     removeSelectedPages,
     reorderPages,
     exportPDF,
-    selectedPages
+    selectedPages,
+    setSelectionMode,
+    selectPagesByArea
   };
 
   return <PDFContext.Provider value={value}>{children}</PDFContext.Provider>;
