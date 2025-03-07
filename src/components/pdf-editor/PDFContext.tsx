@@ -56,8 +56,8 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
     const loadPdfJs = async () => {
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        // Explicitly set the worker source with a version-safe URL
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+        // Use a fixed, known-good CDN URL for the worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         console.log("PDF.js initialized successfully with version:", pdfjsLib.version);
         setPdfJsInitialized(true);
       } catch (error) {
