@@ -5,7 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from '@/lib/utils';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { Grip } from 'lucide-react';
+import { Grip, Maximize2, CheckSquare, Square } from 'lucide-react';
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const PDFPageGrid: React.FC = () => {
   const { pages, togglePageSelection, reorderPages, selectPagesByArea } = usePDFContext();
@@ -16,6 +18,11 @@ const PDFPageGrid: React.FC = () => {
     endX: number;
     endY: number;
   } | null>(null);
+  const [selectedAreaPages, setSelectedAreaPages] = useState<string[]>([]);
+  const [showSelectionActions, setShowSelectionActions] = useState(false);
+  const [selectionActionPosition, setSelectionActionPosition] = useState({ x: 0, y: 0 });
+  const [expandedPage, setExpandedPage] = useState<PDFPage | null>(null);
+  
   const gridRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<Map<string, DOMRect>>(new Map());
   
@@ -32,9 +39,20 @@ const PDFPageGrid: React.FC = () => {
   const handleDragStart = () => {
     setIsDragging(true);
   };
+
+  const expandPage = (page: PDFPage) => {
+    setExpandedPage(page);
+  };
+
+  const closeExpandedPage = () => {
+    setExpandedPage(null);
+  };
   
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!gridRef.current) return;
+    
+    // Hide selection actions if they're showing
+    setShowSelectionActions(false);
     
     // Only start selection with left mouse button
     if (e.button !== 0) return;
@@ -64,7 +82,7 @@ const PDFPageGrid: React.FC = () => {
       });
     };
     
-    const onMouseUp = () => {
+    const onMouseUp = (upEvent: MouseEvent) => {
       if (!selectionBox) return;
       
       // Determine which pages are within the selection box
@@ -89,7 +107,17 @@ const PDFPageGrid: React.FC = () => {
       });
       
       if (selectedPageIds.length > 0) {
-        selectPagesByArea(selectedPageIds);
+        setSelectedAreaPages(selectedPageIds);
+        
+        // Show selection actions near the mouse position
+        if (gridRef.current) {
+          const gridRect = gridRef.current.getBoundingClientRect();
+          setSelectionActionPosition({
+            x: upEvent.clientX - gridRect.left,
+            y: upEvent.clientY - gridRect.top
+          });
+          setShowSelectionActions(true);
+        }
       }
       
       setSelectionBox(null);
@@ -99,7 +127,25 @@ const PDFPageGrid: React.FC = () => {
     
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [selectionBox, selectPagesByArea]);
+  }, [selectionBox]);
+
+  const handleSelectAll = () => {
+    selectPagesByArea(selectedAreaPages);
+    setShowSelectionActions(false);
+  };
+
+  const handleDeselectAll = () => {
+    // Deselect all pages in the selection area
+    const pagesToToggle = pages
+      .filter(page => selectedAreaPages.includes(page.id) && page.selected)
+      .map(page => page.id);
+    
+    pagesToToggle.forEach(pageId => {
+      togglePageSelection(pageId);
+    });
+    
+    setShowSelectionActions(false);
+  };
   
   // Update page references whenever pages change
   const setPageRef = useCallback((pageId: string, element: HTMLDivElement | null) => {
@@ -132,6 +178,37 @@ const PDFPageGrid: React.FC = () => {
         />
       )}
       
+      {showSelectionActions && (
+        <div 
+          className="absolute z-20 bg-background rounded-md shadow-lg p-2 flex gap-2"
+          style={{
+            left: selectionActionPosition.x,
+            top: selectionActionPosition.y,
+            transform: 'translate(-50%, 10px)'
+          }}
+        >
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSelectAll}
+            className="flex items-center gap-1"
+          >
+            <CheckSquare className="h-4 w-4" />
+            <span>Select All</span>
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleDeselectAll}
+            className="flex items-center gap-1"
+          >
+            <Square className="h-4 w-4" />
+            <span>Deselect All</span>
+          </Button>
+        </div>
+      )}
+      
       <DragDropContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
         <Droppable 
           droppableId="pdf-pages" 
@@ -151,6 +228,7 @@ const PDFPageGrid: React.FC = () => {
                 page={pages[rubric.source.index]}
                 index={rubric.source.index}
                 onCheckboxChange={handleCheckboxChange}
+                onExpand={expandPage}
                 dragHandleProps={null}
                 isDragging={true}
               />
@@ -191,6 +269,7 @@ const PDFPageGrid: React.FC = () => {
                         page={page}
                         index={index}
                         onCheckboxChange={handleCheckboxChange}
+                        onExpand={expandPage}
                         dragHandleProps={provided.dragHandleProps}
                         isDragging={isDragging}
                       />
@@ -203,6 +282,26 @@ const PDFPageGrid: React.FC = () => {
           )}
         </Droppable>
       </DragDropContext>
+
+      {/* Modal for expanded page view */}
+      <Dialog open={expandedPage !== null} onOpenChange={closeExpandedPage}>
+        <DialogContent className="max-w-3xl w-[90vw] max-h-[90vh] overflow-auto">
+          {expandedPage && (
+            <div className="flex flex-col items-center">
+              <h2 className="text-xl mb-4 font-medium">
+                {expandedPage.file} - Page {expandedPage.pageNumber}
+              </h2>
+              <div className="border border-border rounded-md p-2 bg-white w-full">
+                <img 
+                  src={expandedPage.dataUrl} 
+                  alt={`Page ${expandedPage.pageNumber} from ${expandedPage.file}`}
+                  className="w-full h-auto"
+                />
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -211,6 +310,7 @@ interface PageCardProps {
   page: PDFPage;
   index: number;
   onCheckboxChange: (pageId: string) => void;
+  onExpand: (page: PDFPage) => void;
   dragHandleProps: any;
   isDragging: boolean;
 }
@@ -219,6 +319,7 @@ const PageCard: React.FC<PageCardProps> = ({
   page,
   index,
   onCheckboxChange,
+  onExpand,
   dragHandleProps,
   isDragging
 }) => {
@@ -241,7 +342,7 @@ const PageCard: React.FC<PageCardProps> = ({
           <span className="font-medium">{index + 1}</span>
         </div>
         
-        <div className="absolute top-2 right-2 group-hover:opacity-100 opacity-80 transition-opacity">
+        <div className="absolute top-2 right-2 flex space-x-2 group-hover:opacity-100 opacity-80 transition-opacity">
           <Checkbox
             checked={page.selected}
             onCheckedChange={() => onCheckboxChange(page.id)}
@@ -262,9 +363,17 @@ const PageCard: React.FC<PageCardProps> = ({
         </div>
         
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <p className="text-white text-xs font-medium truncate">
-            {page.file} - Page {page.pageNumber}
-          </p>
+          <div className="flex justify-between items-center">
+            <p className="text-white text-xs font-medium truncate flex-1">
+              {page.file} - Page {page.pageNumber}
+            </p>
+            <button 
+              onClick={() => onExpand(page)}
+              className="text-white hover:text-cdl transition-colors ml-2"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </Card>
