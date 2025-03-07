@@ -47,26 +47,38 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
   const [pages, setPages] = useState<PDFPage[]>([]);
   const [loading, setLoading] = useState(false);
   const [exportFileName, setExportFileName] = useState(`merged_document_${new Date().toISOString().slice(0, 10)}`);
+  const [pdfJsInitialized, setPdfJsInitialized] = useState(false);
 
   const selectedPages = pages.filter(page => page.selected);
 
   // Load PDF.js dynamically when the component mounts
   useEffect(() => {
     const loadPdfJs = async () => {
-      const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-      return pdfjsLib;
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        // Explicitly set the worker source with a version-safe URL
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+        console.log("PDF.js initialized successfully with version:", pdfjsLib.version);
+        setPdfJsInitialized(true);
+      } catch (error) {
+        console.error("Error initializing PDF.js:", error);
+        toast.error("Failed to initialize PDF processing. Please refresh the page and try again.");
+      }
     };
     
     loadPdfJs();
   }, []);
 
   const uploadPDFs = async (files: FileList) => {
+    if (!pdfJsInitialized) {
+      toast.error("PDF processor is not initialized yet. Please wait a moment and try again.");
+      return;
+    }
+    
     setLoading(true);
     
     try {
       const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
       
       const newPages: PDFPage[] = [];
       
@@ -74,42 +86,63 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
         const file = files[i];
         const fileUrl = URL.createObjectURL(file);
         
-        // Load the PDF
-        const pdf = await pdfjsLib.getDocument(fileUrl).promise;
-        const numPages = pdf.numPages;
-        
-        for (let j = 1; j <= numPages; j++) {
-          const page = await pdf.getPage(j);
-          const viewport = page.getViewport({ scale: 1.0 });
+        try {
+          // Load the PDF
+          const pdf = await pdfjsLib.getDocument(fileUrl).promise;
+          const numPages = pdf.numPages;
           
-          // Create a canvas for rendering
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          
-          // Render the PDF page on the canvas
-          await page.render({
-            canvasContext: context!,
-            viewport: viewport
-          }).promise;
-          
-          // Convert the canvas to a data URL
-          const dataUrl = canvas.toDataURL('image/png');
-          
-          newPages.push({
-            id: `${file.name}-${j}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            file: file.name,
-            pageNumber: j,
-            dataUrl,
-            selected: true,
-            originalFile: file
-          });
+          for (let j = 1; j <= numPages; j++) {
+            try {
+              const page = await pdf.getPage(j);
+              const viewport = page.getViewport({ scale: 1.0 });
+              
+              // Create a canvas for rendering
+              const canvas = document.createElement('canvas');
+              const context = canvas.getContext('2d');
+              if (!context) {
+                throw new Error("Could not get canvas context");
+              }
+              
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+              
+              // Render the PDF page on the canvas
+              await page.render({
+                canvasContext: context,
+                viewport: viewport
+              }).promise;
+              
+              // Convert the canvas to a data URL
+              const dataUrl = canvas.toDataURL('image/png');
+              
+              newPages.push({
+                id: `${file.name}-${j}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                file: file.name,
+                pageNumber: j,
+                dataUrl,
+                selected: true,
+                originalFile: file
+              });
+            } catch (pageError) {
+              console.error(`Error processing page ${j} of ${file.name}:`, pageError);
+              toast.error(`Failed to process page ${j} of ${file.name}`);
+            }
+          }
+        } catch (pdfError) {
+          console.error(`Error processing PDF file ${file.name}:`, pdfError);
+          toast.error(`Failed to process ${file.name}. The file might be corrupted or password-protected.`);
+        } finally {
+          // Clean up the URL object
+          URL.revokeObjectURL(fileUrl);
         }
       }
       
-      setPages(prevPages => [...prevPages, ...newPages]);
-      toast.success(`${newPages.length} pages added successfully.`);
+      if (newPages.length > 0) {
+        setPages(prevPages => [...prevPages, ...newPages]);
+        toast.success(`${newPages.length} pages added successfully.`);
+      } else {
+        toast.error("No pages could be processed from the selected files.");
+      }
     } catch (error) {
       console.error("Error processing PDFs:", error);
       toast.error("Failed to process PDFs. Please try again.");
@@ -244,14 +277,23 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
           return indexA - indexB;
         });
         
-        const file = filePages[0].originalFile;
-        const fileArrayBuffer = await file.arrayBuffer();
-        const srcPdfDoc = await PDFDocument.load(fileArrayBuffer);
-        
-        for (const page of filePages) {
-          // Copy the page from the source PDF
-          const [copiedPage] = await pdfDoc.copyPages(srcPdfDoc, [page.pageNumber - 1]);
-          pdfDoc.addPage(copiedPage);
+        try {
+          const file = filePages[0].originalFile;
+          const fileArrayBuffer = await file.arrayBuffer();
+          const srcPdfDoc = await PDFDocument.load(fileArrayBuffer);
+          
+          for (const page of filePages) {
+            try {
+              // Copy the page from the source PDF
+              const [copiedPage] = await pdfDoc.copyPages(srcPdfDoc, [page.pageNumber - 1]);
+              pdfDoc.addPage(copiedPage);
+            } catch (pageError) {
+              console.error(`Error copying page ${page.pageNumber} from ${page.file}:`, pageError);
+            }
+          }
+        } catch (fileError) {
+          console.error(`Error processing file ${filePages[0].file} for export:`, fileError);
+          toast.error(`Failed to process ${filePages[0].file} for export.`);
         }
       }
       
