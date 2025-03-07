@@ -1,13 +1,11 @@
+
 import React, { useState, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom/client';
 import { usePDFContext, PDFPage } from './PDFContext';
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from '@/lib/utils';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { Grip, Maximize, Check, X } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Grip } from 'lucide-react';
 
 const PDFPageGrid: React.FC = () => {
   const { pages, togglePageSelection, reorderPages, selectPagesByArea } = usePDFContext();
@@ -90,76 +88,16 @@ const PDFPageGrid: React.FC = () => {
         }
       });
       
-      // Only show selection options if we have selected pages
+      // Only continue if we have selected pages
       if (selectedPageIds.length > 0) {
-        const selectionOptionsElement = document.createElement('div');
-        selectionOptionsElement.id = 'selection-options';
-        selectionOptionsElement.style.position = 'absolute';
-        selectionOptionsElement.style.left = `${selectionRect.right + 10}px`;
-        selectionOptionsElement.style.top = `${selectionRect.top}px`;
-        selectionOptionsElement.style.zIndex = '1000';
-        
-        // Create options container
-        const optionsContainer = document.createElement('div');
-        optionsContainer.classList.add(
-          'flex', 'items-center', 'gap-2', 'bg-background', 
-          'p-2', 'rounded-md', 'shadow-md', 'border', 'border-input'
-        );
-        
-        // Add the options UI to the DOM
-        gridRef.current?.appendChild(selectionOptionsElement);
-        selectionOptionsElement.appendChild(optionsContainer);
-        
-        // Render the selection options using React
-        const SelectionOptions = () => {
-          return (
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  selectPagesByArea(selectedPageIds, true);
-                  gridRef.current?.removeChild(selectionOptionsElement);
-                }}
-                className="flex items-center gap-1"
-              >
-                <Check className="h-4 w-4" /> Select All
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  selectPagesByArea(selectedPageIds, false);
-                  gridRef.current?.removeChild(selectionOptionsElement);
-                }}
-                className="flex items-center gap-1"
-              >
-                <X className="h-4 w-4" /> Deselect All
-              </Button>
-            </div>
-          );
-        };
-        
-        // Use ReactDOM to render the options
-        const root = ReactDOM.createRoot(optionsContainer);
-        root.render(<SelectionOptions />);
-        
-        // Add click handler to document to close options when clicking outside
-        const closeHandler = (event: MouseEvent) => {
-          if (
-            selectionOptionsElement && 
-            !selectionOptionsElement.contains(event.target as Node) &&
-            gridRef.current?.contains(selectionOptionsElement)
-          ) {
-            gridRef.current?.removeChild(selectionOptionsElement);
-            document.removeEventListener('click', closeHandler);
-          }
-        };
-        
-        // Delay adding the event listener to prevent immediate closure
-        setTimeout(() => {
-          document.addEventListener('click', closeHandler);
-        }, 100);
+        // Check if the user is holding Shift (for deselect) or Ctrl/Command (for toggle)
+        if (upEvent.shiftKey) {
+          // Deselect all pages in the selection
+          selectPagesByArea(selectedPageIds, false);
+        } else {
+          // Select all pages in the selection
+          selectPagesByArea(selectedPageIds, true);
+        }
       }
       
       setSelectionBox(null);
@@ -192,7 +130,7 @@ const PDFPageGrid: React.FC = () => {
     >
       {selectionBox && (
         <div
-          className="absolute bg-[#ec047b]/20 border border-[#ec047b] z-10 pointer-events-none"
+          className="absolute bg-cdl/20 border border-cdl z-10 pointer-events-none"
           style={{
             left: Math.min(selectionBox.startX, selectionBox.endX),
             top: Math.min(selectionBox.startY, selectionBox.endY),
@@ -308,29 +246,6 @@ const PageCard: React.FC<PageCardProps> = ({
         >
           <Grip className="h-4 w-4 text-muted-foreground" />
         </div>
-        
-        <Dialog>
-          <DialogTrigger asChild>
-            <button
-              className={cn(
-                "absolute bottom-2 right-2",
-                "w-8 h-8 rounded-full bg-background/80 border border-input flex items-center justify-center",
-                "opacity-0 group-hover:opacity-100 transition-opacity"
-              )}
-            >
-              <Maximize className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl w-full p-1 bg-background">
-            <div className="w-full max-h-[calc(100vh-120px)] overflow-auto">
-              <img
-                src={page.dataUrl}
-                alt={`Page ${page.pageNumber} from ${page.file}`}
-                className="w-full h-auto object-contain"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
         
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
           <p className="text-white text-xs font-medium truncate">
