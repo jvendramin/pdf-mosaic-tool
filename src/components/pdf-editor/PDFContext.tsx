@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from "sonner";
 
@@ -26,7 +25,7 @@ interface PDFContextType {
   reorderPages: (startIndex: number, endIndex: number) => void;
   exportPDF: () => Promise<void>;
   selectedPages: PDFPage[];
-  selectPagesByArea: (pageIds: string[], select: boolean) => void;
+  selectPagesByArea: (pageIds: string[]) => void;
 }
 
 const PDFContext = createContext<PDFContextType | undefined>(undefined);
@@ -197,16 +196,13 @@ export const PDFProvider: React.FC<PDFProviderProps> = ({ children }) => {
     setPages(result);
   };
 
-  const selectPagesByArea = (pageIds: string[], select: boolean) => {
+  const selectPagesByArea = (pageIds: string[]) => {
     setPages(prevPages =>
       prevPages.map(page => ({
         ...page,
-        selected: pageIds.includes(page.id) ? select : page.selected
+        selected: pageIds.includes(page.id) || page.selected
       }))
     );
-    
-    const actionText = select ? "selected" : "deselected";
-    toast.success(`${pageIds.length} page(s) ${actionText}`);
   };
 
   const exportPDF = async () => {
