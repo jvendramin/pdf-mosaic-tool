@@ -51,6 +51,11 @@ const PDFPageGrid: React.FC = () => {
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!gridRef.current) return;
     
+    // Ignore if clicking on a card element (to allow normal interactions with cards)
+    if ((e.target as HTMLElement).closest('.pdf-page')) {
+      return;
+    }
+    
     // Hide selection actions if they're showing
     setShowSelectionActions(false);
     
@@ -80,36 +85,40 @@ const PDFPageGrid: React.FC = () => {
         endX,
         endY
       });
+      
+      // Calculate which pages are in the current selection box
+      const currentSelectionRect = {
+        left: Math.min(startX, endX),
+        right: Math.max(startX, endX),
+        top: Math.min(startY, endY),
+        bottom: Math.max(startY, endY)
+      };
+      
+      // Highlight pages that intersect with the selection box
+      const currentSelectedPageIds: string[] = [];
+      pagesRef.current.forEach((rect, pageId) => {
+        if (
+          rect.left < currentSelectionRect.right &&
+          rect.right > currentSelectionRect.left &&
+          rect.top < currentSelectionRect.bottom &&
+          rect.bottom > currentSelectionRect.top
+        ) {
+          currentSelectedPageIds.push(pageId);
+        }
+      });
+      
+      // Update the selected area pages in real-time
+      setSelectedAreaPages(currentSelectedPageIds);
     };
     
     const onMouseUp = (upEvent: MouseEvent) => {
       if (!selectionBox) return;
       
-      // Determine which pages are within the selection box
-      const selectionRect = {
-        left: Math.min(selectionBox.startX, selectionBox.endX),
-        right: Math.max(selectionBox.startX, selectionBox.endX),
-        top: Math.min(selectionBox.startY, selectionBox.endY),
-        bottom: Math.max(selectionBox.startY, selectionBox.endY)
-      };
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
       
-      const selectedPageIds: string[] = [];
-      
-      pagesRef.current.forEach((rect, pageId) => {
-        if (
-          rect.left < selectionRect.right &&
-          rect.right > selectionRect.left &&
-          rect.top < selectionRect.bottom &&
-          rect.bottom > selectionRect.top
-        ) {
-          selectedPageIds.push(pageId);
-        }
-      });
-      
-      if (selectedPageIds.length > 0) {
-        setSelectedAreaPages(selectedPageIds);
-        
-        // Show selection actions near the mouse position
+      // Only show action menu if we have selected pages
+      if (selectedAreaPages.length > 0) {
         if (gridRef.current) {
           const gridRect = gridRef.current.getBoundingClientRect();
           setSelectionActionPosition({
@@ -120,14 +129,13 @@ const PDFPageGrid: React.FC = () => {
         }
       }
       
+      // Clear the selection box
       setSelectionBox(null);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
     };
     
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [selectionBox]);
+  }, [selectionBox, selectedAreaPages]);
 
   const handleSelectAll = () => {
     selectPagesByArea(selectedAreaPages);
@@ -156,6 +164,24 @@ const PDFPageGrid: React.FC = () => {
     }
   }, []);
   
+  // Update page references when component mounts or pages change
+  React.useEffect(() => {
+    const updatePageRefs = () => {
+      const pageElements = document.querySelectorAll('.pdf-page');
+      pageElements.forEach((element) => {
+        const pageId = element.getAttribute('data-page-id');
+        if (pageId) {
+          pagesRef.current.set(pageId, element.getBoundingClientRect());
+        }
+      });
+    };
+    
+    // Update refs after a small delay to ensure all pages are rendered
+    const timer = setTimeout(updatePageRefs, 100);
+    
+    return () => clearTimeout(timer);
+  }, [pages]);
+  
   if (pages.length === 0) {
     return null;
   }
@@ -173,10 +199,27 @@ const PDFPageGrid: React.FC = () => {
             left: Math.min(selectionBox.startX, selectionBox.endX),
             top: Math.min(selectionBox.startY, selectionBox.endY),
             width: Math.abs(selectionBox.endX - selectionBox.startX),
-            height: Math.abs(selectionBox.endY - selectionBox.endY)
+            height: Math.abs(selectionBox.endY - selectionBox.startY)
           }}
         />
       )}
+      
+      {/* Visual highlight for pages in current selection */}
+      {selectedAreaPages.length > 0 && selectionBox && pages.map(page => (
+        selectedAreaPages.includes(page.id) && (
+          <div 
+            key={`highlight-${page.id}`}
+            className="absolute bg-cdl/10 border-2 border-cdl rounded-lg z-5 pointer-events-none"
+            style={{
+              left: pagesRef.current.get(page.id)?.left || 0,
+              top: pagesRef.current.get(page.id)?.top || 0,
+              width: pagesRef.current.get(page.id)?.width || 0,
+              height: pagesRef.current.get(page.id)?.height || 0,
+              transform: `translate(${gridRef.current ? -gridRef.current.scrollLeft : 0}px, ${gridRef.current ? -gridRef.current.scrollTop : 0}px)`
+            }}
+          />
+        )
+      ))}
       
       {showSelectionActions && (
         <div 
@@ -220,17 +263,17 @@ const PDFPageGrid: React.FC = () => {
               {...provided.dragHandleProps}
               style={{
                 ...provided.draggableProps.style,
-                width: '100%', // Maintain width during drag
-                height: 'auto', // Maintain height ratio
+                width: '150px',  // Fixed width for dragged element
+                height: '200px', // Fixed height for dragged element
+                opacity: 0.7,    // Make it subtle/transparent
+                zIndex: 1000     // Ensure it's above other elements
               }}
+              className="bg-background rounded-md shadow-md"
             >
-              <PageCard
-                page={pages[rubric.source.index]}
-                index={rubric.source.index}
-                onCheckboxChange={handleCheckboxChange}
-                onExpand={expandPage}
-                dragHandleProps={null}
-                isDragging={true}
+              <img
+                src={pages[rubric.source.index].dataUrl}
+                alt={`Page ${pages[rubric.source.index].pageNumber}`}
+                className="w-full h-full object-contain p-2"
               />
             </div>
           )}
@@ -256,14 +299,11 @@ const PDFPageGrid: React.FC = () => {
                       {...provided.draggableProps}
                       style={{
                         ...provided.draggableProps.style,
-                        // Ensure consistent sizing when dragging
-                        width: snapshot.isDragging ? 'auto' : undefined,
-                        height: snapshot.isDragging ? 'auto' : undefined,
-                        // Use higher z-index when dragging
-                        zIndex: snapshot.isDragging ? 1000 : undefined,
-                        // If not being dragged, normal position
+                        // Handle normal positioning when not dragging
                         transform: snapshot.isDragging ? provided.draggableProps.style?.transform : undefined,
                       }}
+                      data-page-id={page.id}
+                      className="pdf-page"
                     >
                       <PageCard
                         page={page}
@@ -272,6 +312,7 @@ const PDFPageGrid: React.FC = () => {
                         onExpand={expandPage}
                         dragHandleProps={provided.dragHandleProps}
                         isDragging={isDragging}
+                        isHighlighted={selectedAreaPages.includes(page.id)}
                       />
                     </div>
                   )}
@@ -313,6 +354,7 @@ interface PageCardProps {
   onExpand: (page: PDFPage) => void;
   dragHandleProps: any;
   isDragging: boolean;
+  isHighlighted?: boolean;
 }
 
 const PageCard: React.FC<PageCardProps> = ({
@@ -321,13 +363,15 @@ const PageCard: React.FC<PageCardProps> = ({
   onCheckboxChange,
   onExpand,
   dragHandleProps,
-  isDragging
+  isDragging,
+  isHighlighted = false
 }) => {
   return (
     <Card 
       className={cn(
         "group relative overflow-hidden border pdf-page",
-        page.selected ? "border-cdl" : "border-border"
+        page.selected ? "border-cdl" : "border-border",
+        isHighlighted ? "ring-2 ring-cdl/70" : ""
       )}
     >
       <div className="aspect-[3/4] relative">
